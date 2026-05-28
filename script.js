@@ -289,7 +289,7 @@ if (checkoutToggle) {
     }
 
     // ⚠️ استبدلي هذا الرابط برابط Stripe الحقيقي قبل النشر
-    window.location.href = "https://buy.stripe.com/test_4gMdR229ve1TcgDbuZcfK00";
+    window.location.href = "https://buy.stripe.com/YOUR_REAL_STRIPE_LINK";
   });
 }
 
@@ -400,34 +400,43 @@ if (registerForm) {
       return;
     }
 
-    // 3. مرونة التسجيل: إذا لم يتم إدخال إيميل نقوم بإنشاء بريد مخصص تلقائياً يعتمد على الجوال لضمان تشغيل الحساب فوراً
-    if (!email) {
-      email = phone + "@rafqa-store.com";
-    }
+    // 3. الحساب يُنشأ دائماً بالرقم — الإيميل الحقيقي يُحفظ في Firestore فقط
+    const authEmail = phone + "@rafqa-store.com";
+    const realEmail = email || ""; // الإيميل الحقيقي للتواصل فقط
 
     try {
-      // أ) إنشاء الحساب الفعلي داخل نظام الحسابات (Firebase Authentication)
-      const cred = await currentAuth.createUserWithEmailAndPassword(email, pass);
-      
-      // ب) تحديث وتثبيت اسم العميل الظاهر بـ الهيدر
+      // أ) إنشاء الحساب بالرقم كإيميل وهمي
+      const cred = await currentAuth.createUserWithEmailAndPassword(authEmail, pass);
+
+      // ب) تحديث اسم المستخدم
       await cred.user.updateProfile({ displayName: name });
-      
-      // جـ) حفظ بيانات العميل بالكامل (رقم الجوال الحقيقي والاسم والبريد) داخل الـ Database لتوثيق مشترياته
+
+      // جـ) حفظ البيانات الكاملة في Firestore
       if (currentDb) {
-        await currentDb.collection("users").doc(cred.user.uid).set({
-          uid: cred.user.uid,
-          name: name,
-          phone: phone,
-          email: email,
-          createdAt: Date.now()
-        });
+        try {
+          await currentDb.collection("users").doc(cred.user.uid).set({
+            uid: cred.user.uid,
+            name: name,
+            phone: phone,
+            email: realEmail,
+            createdAt: Date.now()
+          });
+        } catch (dbErr) {
+          console.error("فشل حفظ البيانات في Firestore:", dbErr.message);
+        }
       }
 
       alert("🎉 تم إنشاء حسابكِ بنجاح! أهلاً بكِ في عائلة Rafqa.");
       updateHeaderUser(cred.user);
       closeModal(registerModal);
+
     } catch (err) {
-      alert("حدث خطأ أثناء إنشاء الحساب: " + err.message);
+      const registerErrors = {
+        "auth/email-already-in-use": "هذا الرقم مسجّل مسبقاً. جربي تسجيل الدخول.",
+        "auth/weak-password":        "كلمة المرور ضعيفة، يجب أن تكون 6 أحرف أو أكثر.",
+        "auth/network-request-failed": "تعذّر الاتصال، تحققي من الإنترنت.",
+      };
+      alert(registerErrors[err.code] || "حدث خطأ: " + err.message);
     }
   });
 }
